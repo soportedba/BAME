@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  labels:
+    app: mysql
+data:
+  MYSQL_DATABASE: facturascripts
+  MYSQL_USER: facturascripts
+  MYSQL_PASSWORD: facturascripts12345678
+  MYSQL_ROOT_PASSWORD: root12345678

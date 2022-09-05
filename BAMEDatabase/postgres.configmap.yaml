@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-postgres
+  labels:
+    app: postgres
+data:
+  POSTGRES_DB: bame
+  POSTGRES_USER: bame
+  POSTGRES_PASSWORD: bame12345678
+  POSTGRES_HOST_AUTH_METHOD: md5

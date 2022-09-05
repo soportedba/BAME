@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-utilities
+data:
+  utilities.sh: |
+    #!/bin/bash
+    echo "Provisioning testing environment"
+    apt-get update -y
+    apt-get install postgresql-client mysql-client dnsutils net-tools iputils-ping wget curl -y
+  ADMINER_DEFAULT_SERVER: mysql
