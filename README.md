@@ -64,15 +64,33 @@ kubectl get pvc mysql-pv-claim
 kubectl exec -it pod/mysql-0 -- /bin/bash
 ```
 
+* Example application (Facturascripts)
+
+Application deployment, will use Facturascripts (ERP system) as application example.
+```
+kubectl apply -f BAMEApp/facturascripts.storage.yaml
+kubectl apply -f BAMEApp/facturascripts.yaml
+```
+First application deployment need to set up some configuration parameters through the main web page: database server: mysql, username: facturascripts, password: facturascripts12345678.
+
+
 ## Accessing
 Currently, access to resources is defined by NodePort, so to access to internal resources like MySQL, PostgreSQL, adminer ... you need to check the assigned local port:
 ```
 kubectl get service
-NAME             TYPE        CLUSTER-IP      EXTERNAL-IP    PORT(S)          AGE
-kubernetes       ClusterIP   10.96.0.1       <none>         443/TCP          124m
-mysql            NodePort    10.106.250.4    192.168.0.34   3306:32762/TCP   116m
-postgres         NodePort    10.104.56.37    192.168.0.34   5432:30636/TCP   121m
-utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/TCP   119m
+NAME                     TYPE        CLUSTER-IP      EXTERNAL-IP    PORT(S)          AGE
+service/facturascripts   NodePort    10.108.122.89   192.168.0.34   80:32749/TCP     2m33s
+service/kubernetes       ClusterIP   10.96.0.1       <none>         443/TCP          4h42m
+service/mysql            NodePort    10.106.250.4    192.168.0.34   3306:32762/TCP   4h34m
+service/postgres         NodePort    10.104.56.37    192.168.0.34   5432:30636/TCP   4h40m
+service/utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/TCP   4h38m
 ```
-So, to access postgresql database you can use: 192.168.0.34:30636 externally from k8s, or name "postgres" with default port: 5432 if accessing internally from k8s.
+To access postgresql database:
+	You can use: 192.168.0.34:30636 externally from k8s, or name "postgres" with default port: 5432 if accessing internally from k8s.
+To access mysql database:
+	You can use: 192.168.0.34:32762 externally from k8s, or name "mysql" with default port: 3306 if accessing internally from k8s.
+To access Facturascripts:
+	From a web browser: 192.168.0.34:32749 externally from k8s.
+
+
 
