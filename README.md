@@ -25,6 +25,7 @@ BAME, Business Analytics Made Easy project
 Will list all the component deployments.
 
 * Utilities
+
 Deploy utilities pod, with postgresql/mysql clients, dnsutils, wget, curl, adminer
 ```
 kubectl apply -f BAMEUtilities/utilities.configmap.yaml
@@ -32,6 +33,7 @@ kubectl apply -f BAMEUtilities/utilities.yaml
 ```
 
 * PostgreSQL (for DWH)
+
 Deploy PostgreSQL to be used as DWH repository
 ```
 kubectl apply -f BAMEDatabase/postgres.configmap.yaml
@@ -47,6 +49,7 @@ kubectl exec -it pod/postgres-0 -- /bin/bash
 ```
 
 * MySQL (for app)
+
 Deploy MySQL to be used as main application repository (Facturascripts)
 ```
 kubectl apply -f BAMEDatabase/mysql.configmap.yaml
