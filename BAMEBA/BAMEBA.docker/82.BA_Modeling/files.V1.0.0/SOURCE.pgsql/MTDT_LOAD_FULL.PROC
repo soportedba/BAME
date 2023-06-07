@@ -1,0 +1,341 @@
+﻿CREATE OR REPLACE FUNCTION MTDT_LOAD_FULL (VCUBE IN integer DEFAULT 0, VPOST IN VARCHAR DEFAULT 'Y') RETURNS VOID AS $$
+DECLARE
+	V_SQL varchar(4000);
+	V_SELECT varchar(4000);
+	V_SQL_CUBE text;
+	V_NAME varchar(30);
+	V_STA_TABLE VARCHAR(100);
+	V_TYPE VARCHAR(100);
+	V_TYPE_DIM VARCHAR(100);
+	V_DESCRIPTION_DIM VARCHAR(100);
+	V_CUBE varchar(30);
+	V_NAME_IND varchar(30);
+	V_HASH varchar(64);
+	V_ID_LOG integer;
+	V_ID_CUBE integer;
+	V_ID_DIMENSION integer;
+	V_ID_INDICATOR integer;
+	V_SQL_IND varchar(4000);
+	v_upperbound integer;
+	v_cur        INTEGER;
+	v_ret        integer;
+	VFEC_INI	VARCHAR(100);
+	VFEC_FIN	VARCHAR(100);
+	VCOUNT	integer;
+	V_TMP_NAME VARCHAR(100);
+	V_TABLE VARCHAR(100);
+	V_COLUMN VARCHAR(100);
+  C_DIMENSION CURSOR (VCUBE integer, VDEGEN_INCLUDED varchar)
+  IS
+    SELECT ID_DIMENSION,NAME, REPLACE(SQL, '#','''') AS VSQL, STA_TABLE, TYPE, DESCRIPTION
+    FROM
+    	MTDT_DIMENSION
+		WHERE
+			((VDEGEN_INCLUDED='Y' AND TYPE='DEGEN') OR 
+			(VDEGEN_INCLUDED='N' AND TYPE!='DEGEN') OR 
+			(VDEGEN_INCLUDED='ALL')) AND
+			ID_CUBE=(CASE WHEN VCUBE=0 THEN ID_CUBE ELSE VCUBE END) AND
+			-- We will manage all dimensions, although for TYPE D (dates) special treatments will have to be made
+			(SCHEDULER='DAILY' OR
+			(SCHEDULER = (CASE WHEN TRIM(TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7))) in ('MONDAY','LUNES')  THEN 'WEEKLY' else '0' END) OR
+			SCHEDULER = (CASE WHEN substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01'
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													 THEN 'MONTHLY' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('04','07','10','01'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('04','07','10','01') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'TRIMESTRAL' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01','07'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01','07') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'SEMESTRAL' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'ANUAL' ELSE '0' END)))
+    ORDER BY ID_DIMENSION;
+  C_CUBE CURSOR (VCUBE integer)
+  IS
+    SELECT ID_CUBE,NAME, TYPE, COALESCE(TMP_NAME,'') AS TMP_NAME
+    FROM
+    	MTDT_CUBE
+		WHERE
+			TYPE='COMPLETE' AND
+			ID_CUBE=(CASE WHEN VCUBE=0 THEN ID_CUBE ELSE VCUBE END) AND
+			(SCHEDULER='DAILY' OR
+			(SCHEDULER = (CASE WHEN TRIM(TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7))) in ('MONDAY','LUNES')  THEN 'WEEKLY' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01'
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													 THEN 'MONTHLY' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('04','07','10','01'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('04','07','10','01') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'TRIMESTRAL' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01','07'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01','07') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'SEMESTRAL' ELSE '0' END) OR
+			SCHEDULER = (CASE WHEN (substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='01' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01'))
+																OR
+																(substr(TO_CHAR(current_date, 'DD/MM/YYYY'),1,2) ='02' AND
+																substr(TO_CHAR(current_date, 'DD/MM/YYYY'),4,2) IN ('01') AND
+																TRIM(substr(TO_CHAR(current_date, 'DAY'),1,7)) in ('MONDAY','LUNES')  )
+													THEN 'ANUAL' ELSE '0' END)))
+    ORDER BY ID_CUBE;
+  C_INDICATOR CURSOR (V_ID_CUBE integer)
+  IS
+  	SELECT NAME, REPLACE(SQL, '#','''') AS VSQL, ID_INDICATOR
+  	FROM
+  		MTDT_INDICATOR
+  	WHERE
+  		ID_CUBE=V_ID_CUBE
+  	ORDER BY ID_INDICATOR;
+  C_CUBE_FILT CURSOR(V_ID_DIMENSION integer)
+  IS
+	SELECT C.NAME AS CUBE 
+	FROM 
+		MTDT_CUBE C, 
+		MTDT_DIMENSION CDC 
+	WHERE 
+		CDC.ID_CUBE=C.ID_CUBE AND 
+		CDC.ID_DIMENSION=v_ID_DIMENSION; 	
+  C_TABLA CURSOR(V_TABLA varchar)
+  IS
+	select (case 
+						when data_type in ('character','character varying','varchar') then 'cast('||chr(39)||'N/A'||chr(39)||' as '||data_type||')'
+						when data_type in ('bigint','integer') then 'cast(0 as '||data_type||')'
+						when upper(data_type) in ('USER-DEFINED', 'TEXT') and column_name like 'geom%' then 'cast('||chr(39)||'POINT(0 0)'||chr(39)||' as text)'
+						when data_type in ('timestamp without time zone','timestamp with time zone','date') then 'cast('||chr(39)||'1970-01-01'||chr(39)||' as '||data_type||')' 
+						when data_type in ('boolean') then 'cast('||chr(39)||'f'||chr(39)||' as '||data_type||')' 
+						when data_type in ('uuid') then 'cast('||chr(39)||'00000000-0000-0000-0000-000000000000'||chr(39)||' as '||data_type||')' 
+						else null
+						end) ||' as '||column_name as columna,
+			-- PARA TODAS LAS COLUMNAS SALVO IDD_.. QUE SE DEBEN GESTIONAR POR LOS PRE-POST DE LOS CUBES
+			'update '||table_name||' set '||(case 
+						when data_type in ('character','character varying','varchar') then column_name||'='||chr(39)||'N/A'||chr(39)
+						when data_type in ('bigint','integer') then column_name||'=0'
+						when upper(data_type) in ('USER-DEFINED','TEXT') and column_name like 'geom%' then column_name||'='||chr(39)||'POINT(0 0)'||chr(39)
+						when data_type in ('timestamp without time zone','timestamp with time zone','date') then column_name||'='||chr(39)||'2200-12-31'||chr(39)
+						else null
+						end)||' where '||column_name||' is null' as columna_zeros
+					from 
+						information_Schema.columns 
+					where 
+						table_name=V_TABLA and table_schema ='public' and upper(column_name) not like 'IDD_%'; 
+BEGIN
+-- TO BE ABLE TO INSERT SELECTS ON TEMPORARY TABLES WITHOUT ANYTHING ABOUT THE FKS
+-- DEFERRABLE INITIALLY IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+	FOR REG_COL IN C_CUBE(VCUBE)
+	LOOP
+		V_CUBE:=REG_COL.NAME;
+		V_ID_CUBE:=REG_COL.ID_CUBE;
+		V_TMP_NAME:=REG_COL.TMP_NAME;
+		
+		-- DIMENSIONS LOAD
+		FOR REG_COL IN C_DIMENSION(V_ID_CUBE,'N')
+		LOOP
+			  -- CARGA PRE DE DIMENSIONES
+			  v_id_dimension:=reg_col.id_dimension;
+			  perform * from MTDT_LOAD_PRE_POST(v_ID_DIMENSION,'PRE','DIMENSION');
+			  V_SQL:=REG_COL.VSQL;
+			  V_NAME:=REG_COL.NAME;
+			  V_STA_TABLE:=REG_COL.STA_TABLE;
+			  V_TYPE_DIM:=REG_COL.TYPE;
+			  -- HERE WE REGISTER THE CURRENT DATE ON THE LOG TABLE
+			  V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,V_SQL,'MTDT_LOAD',REG_COL.ID_DIMENSION||'.a');
+			  -- WE CHECK THE NUMBER OF RECORDS TO BE TREATED
+			-- When type=REFER, use description as table_name
+			V_DESCRIPTION_DIM:=REG_COL.DESCRIPTION;
+			IF V_TYPE_DIM='REFER' THEN
+				V_TABLE=V_DESCRIPTION_DIM;
+				V_COLUMN=V_NAME;
+			ELSE
+				V_TABLE='DIM_'||V_NAME;
+				V_COLUMN=V_NAME;
+			END IF;	  
+			IF V_TYPE_DIM <>'D' THEN
+				BEGIN
+						-- FOR VCDC IN (SELECT C.NAME CUBE FROM MTDT_CUBE C, MTDT_DIMENSION CDC WHERE CDC.ID_CUBE=C.ID_CUBE AND CDC.ID_DIMENSION=REG_COL.ID_DIMENSION)
+						FOR VCDC IN C_CUBE_FILT(REG_COL.ID_DIMENSION)
+						LOOP
+							BEGIN
+									SELECT md5(VCDC.CUBE||'_'||V_COLUMN) INTO V_HASH ;
+								EXECUTE 'ALTER TABLE '||VCDC.CUBE||' DROP CONSTRAINT FK_'||V_HASH;
+								-- EXECUTE 'ALTER TABLE '||V_REFERENCIAS.TABLE_NAME||' DROP CONSTRAINT '||V_REFERENCIAS.CONSTRAINT_NAME;
+							 EXCEPTION
+								WHEN OTHERS THEN NULL;
+							END;
+						-- COMMIT;
+						END LOOP;
+					IF V_TYPE_DIM <>'REFER' THEN
+					  EXECUTE 'DROP TABLE '||V_TABLE;
+					END IF;
+				EXCEPTION
+					WHEN OTHERS THEN NULL;
+				END;
+				IF V_TYPE_DIM <>'REFER' THEN
+					EXECUTE 'CREATE UNLOGGED TABLE '||V_TABLE||' AS '||V_SQL;
+				END IF;
+			END IF;
+			  V_ID_LOG:=MTDT_LOG_REGISTRATION('U',V_ID_LOG,'','','');
+				IF VPOST='Y' THEN
+					perform * from MTDT_LOAD_PRE_POST(v_ID_DIMENSION,'POST','DIMENSION');
+				END IF;
+		END LOOP;
+		
+		-- CUBE SQL GENERATION AND LOAD
+		perform * from MTDT_LOAD_PRE_POST(V_ID_CUBE,'PRE','CUBE');
+		-- V_TMP_NAME = temporary preloaded data
+		IF V_TMP_NAME IS NULL OR V_TMP_NAME = '' THEN
+			-- CARGA DE TABLAS TEMPORALES DE INDICATORES
+			FOR REG_COL_IND IN C_INDICATOR(V_ID_CUBE)
+			LOOP
+				V_NAME_IND:=REG_COL_IND.NAME;
+				V_ID_INDICATOR:=REG_COL_IND.ID_INDICATOR;
+				V_SQL_IND:=REG_COL_IND.VSQL;
+			  -- HERE WE REGISTER THE CURRENT DATE ON THE LOG TABLE
+			  V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,V_SQL_IND,'MTDT_LOAD',V_ID_INDICATOR||'');
+  			  BEGIN
+				EXECUTE 'DROP TABLE TMP_'||V_NAME_IND;
+				EXCEPTION
+				   WHEN OTHERS THEN NULL;
+			  END;
+			  EXECUTE 'CREATE UNLOGGED TABLE TMP_'||V_NAME_IND||' AS '||V_SQL_IND;
+			  V_ID_LOG:=MTDT_LOG_REGISTRATION('U',V_ID_LOG,'','','');
+			END LOOP;
+		END IF;
+		
+		-- CREATION SQL CREATION CUBE
+		V_SQL_CUBE:=MTDT_GEN_SQL_CUBE(V_ID_CUBE,V_TMP_NAME);
+		V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,V_SQL_CUBE,'MTDT_LOAD(CUBE)',V_ID_CUBE||'');
+		-- THE CREATION OF THE TABLE OF THE CUBE IF IT DOES NOT EXIST IS DELEGATED IN THE PRE_POST OF THE CUBE
+		BEGIN
+			EXECUTE 'DROP TABLE '||V_CUBE;
+		 EXCEPTION
+			WHEN OTHERS THEN NULL;
+		END;
+		 EXECUTE V_SQL_CUBE;
+		V_ID_LOG:=MTDT_LOG_REGISTRATION('U',V_ID_LOG,'','','');
+		IF V_TMP_NAME IS NULL THEN		
+			FOR REG_COL_IND IN C_INDICATOR(V_ID_CUBE)
+			LOOP
+				V_NAME_IND:=REG_COL_IND.NAME;
+				V_ID_INDICATOR:=REG_COL_IND.ID_INDICATOR;
+				V_SQL_IND:=REG_COL_IND.VSQL;
+			BEGIN
+				  EXECUTE 'DROP TABLE TMP_'||V_NAME_IND;
+			 EXCEPTION
+				WHEN OTHERS THEN NULL;
+			END;
+			END LOOP;
+		END IF;
+		-- Post cube always will be executed independtly from VPOST parameter
+		perform * from MTDT_LOAD_PRE_POST(V_ID_CUBE,'POST','CUBE');
+		IF VPOST='Y' THEN
+			-- CUBE INDEXES CREATION
+			perform * from MTDT_INDEXES(V_CUBE,V_ID_CUBE);
+		END IF;
+		-- Special DEGEN dimensions, loaded after cube generation, based in cube data loaded
+		FOR REG_COL IN C_DIMENSION(V_ID_CUBE,'Y')
+		LOOP
+			V_NAME:=REG_COL.NAME;
+			V_TABLE:='DIM_'||V_NAME;
+			-- Will remove FKs and load
+			BEGIN
+				EXECUTE 'CREATE UNLOGGED TABLE '||V_TABLE||' AS SELECT DISTINCT '||V_NAME||' FROM '||V_CUBE||' WHERE AUD_FEC >= '||VFEC_INI||' AND AUD_FEC <= '||VFEC_FIN;
+			EXCEPTION
+				WHEN OTHERS THEN NULL;
+			END;
+			EXECUTE 'INSERT INTO '||V_TABLE||' SELECT DISTINCT '||V_NAME||' FROM '||V_CUBE||' WHERE AUD_FEC >= '||VFEC_INI||' AND AUD_FEC <= '||VFEC_FIN||' AND '||V_NAME||' NOT IN (SELECT '||V_NAME||' FROM '||V_TABLE||')';
+		END LOOP;		
+	    
+		-- INDEX AND CONSTRAINTS DIMENSIONS LOAD
+		FOR REG_COL IN C_DIMENSION(V_ID_CUBE,'ALL')
+		LOOP
+			V_TYPE_DIM:=REG_COL.TYPE;
+			-- PKS OF DIMENSIONS
+			V_NAME:=REG_COL.NAME;
+			-- When type=REFER, use description as table_name
+			V_DESCRIPTION_DIM:=REG_COL.DESCRIPTION;
+			IF V_TYPE_DIM='REFER' THEN
+				V_TABLE=V_DESCRIPTION_DIM;
+				V_COLUMN=V_NAME;
+			ELSE
+				V_TABLE='DIM_'||V_NAME;
+				V_COLUMN=V_NAME;
+			END IF;
+			
+			IF V_TYPE_DIM<>'D' THEN
+				BEGIN
+					IF V_TYPE_DIM <>'REFER' THEN
+						EXECUTE 'CREATE INDEX DIM_'||V_COLUMN||'_PK ON '||V_TABLE||'('||V_COLUMN||' desc )' ;
+						EXECUTE 'ALTER TABLE '||V_TABLE||' ADD CONSTRAINT '||V_COLUMN||'_PK PRIMARY KEY ('||V_COLUMN||') ' ;
+					END IF;
+					IF V_TYPE_DIM<>'SNOW' THEN					
+						FOR VCDC IN C_CUBE_FILT(REG_COL.ID_DIMENSION)
+						LOOP
+							BEGIN
+								SELECT md5(VCDC.CUBE||'_'||V_COLUMN) INTO V_HASH;
+								EXECUTE 'ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_COLUMN||') REFERENCES '||V_TABLE||'('||V_COLUMN||') DEFERRABLE INITIALLY IMMEDIATE' ;
+									V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,'ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_COLUMN||') REFERENCES '||V_TABLE||'('||V_COLUMN||') DEFERRABLE INITIALLY IMMEDIATE','MTDT_LOAD(CUBE)',VCUBE||'');
+							END;
+						END LOOP;
+					END IF;
+					V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,'CREACION DE PK SOBRE TABLA: '||V_TABLE,'MTDT_LOAD(CUBE)',VCUBE||'');
+				END;
+				IF V_TYPE_DIM <>'REFER' THEN
+					perform * from MTDT_INDEXES('DIM_'||V_NAME);
+				END IF;
+			ELSE
+				/* For TYPE date D, the dimension table must have in NAME the NAME of column pk (eg date_id)
+					And in DESCRIPTION the NAME of the table without CB_DIM_ (eg dates, hour_minute)*/
+				BEGIN
+					/* It can be improved by including a previous existence check of indexes / pks / fks*/
+					BEGIN
+						EXECUTE 'CREATE INDEX CB_DIM_'||V_NAME||'_PK ON CB_DIM_'||V_DESCRIPTION_DIM||'('||V_NAME||') ' ;
+						EXECUTE 'ALTER TABLE CB_DIM_'||V_DESCRIPTION_DIM||' ADD CONSTRAINT '||V_NAME||'_PK PRIMARY KEY ('||V_NAME||') ' ;
+					EXCEPTION
+						WHEN OTHERS THEN NULL;
+					END;
+					FOR VCDC IN C_CUBE_FILT(REG_COL.ID_DIMENSION)
+					LOOP
+						BEGIN
+							SELECT md5(VCDC.CUBE||'_IDD_'||V_NAME) INTO V_HASH;
+							EXECUTE 'ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_NAME||') REFERENCES CB_DIM_'||V_DESCRIPTION_DIM||'('||V_NAME||') DEFERRABLE INITIALLY IMMEDIATE' ;
+								V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,'ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_NAME||') REFERENCES CB_DIM_'||V_DESCRIPTION_DIM||'('||V_NAME||') DEFERRABLE INITIALLY IMMEDIATE','MTDT_LOAD(CUBE)',VCUBE||'');
+						END;
+					END LOOP;
+					V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,'CREACION DE PK SOBRE TABLA: CB_DIM_'||V_DESCRIPTION_DIM,'MTDT_LOAD(CUBE)',VCUBE||'');
+				exception
+						when others then null;			
+				end;
+				IF VPOST='Y' THEN
+						perform * from MTDT_INDEXES('CB_DIM_'||V_DESCRIPTION_DIM);			
+				end if;			
+			END IF;
+		END LOOP;
+	END LOOP;
+END;
+$$ language plpgsql;
+

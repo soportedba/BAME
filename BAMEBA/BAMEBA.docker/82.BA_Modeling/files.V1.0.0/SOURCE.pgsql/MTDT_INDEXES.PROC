@@ -1,0 +1,118 @@
+﻿CREATE OR REPLACE function MTDT_INDEXES (VTABLE IN varchar, VCUBE IN integer DEFAULT 0)
+RETURNS VOID AS $$
+DECLARE
+	T_COL CURSOR (VTABLE varchar)   
+	IS
+    SELECT column_name AS COLUMN_NAME
+    from	
+    	information_schema.columns utc 
+    where
+    	utc.table_schema='public' and
+		UPPER(utc.table_name)=UPPER(VTABLE) and
+		utc.column_name not like 'personaldata_%' and
+		-- index up to 2000 chars columns
+		(utc.character_maximum_length is null or utc.character_maximum_length <= 2000) and
+    	utc.column_name not in (
+			select
+				a.attname as column_name
+			from
+				pg_class t,
+				pg_class i,
+				pg_index ix,
+				pg_attribute a
+			where
+				t.oid = ix.indrelid
+				and i.oid = ix.indexrelid
+				and a.attrelid = t.oid
+				and a.attnum = ANY(ix.indkey)
+				and t.relkind = 'r'
+				and upper(t.relname) =UPPER(VTABLE))
+    	;
+	T_COL_CUBE CURSOR (VTABLE varchar,VCUBE integer)   
+	IS
+    SELECT column_name AS COLUMN_NAME
+    from	
+    	information_schema.columns utc ,
+    	MTDT_dimension d
+    where
+		utc.table_schema='public' and
+    	UPPER(utc.table_name)=UPPER(VTABLE) and
+		(utc.character_maximum_length is null or utc.character_maximum_length <= 2000) and
+    	utc.column_name not in (select
+				a.attname as column_name
+			from
+				pg_class t,
+				pg_class i,
+				pg_index ix,
+				pg_attribute a
+			where
+				t.oid = ix.indrelid
+				and i.oid = ix.indexrelid
+				and a.attrelid = t.oid
+				and a.attnum = ANY(ix.indkey)
+				and t.relkind = 'r'
+				and upper(t.relname) =UPPER(VTABLE)) and
+    	REPLACE(UPPER(utc.column_name),'IDD_','')=UPPER(d.NAME) and
+    	d.id_CUBE=VCUBE   	
+	union
+	SELECT column_name AS COLUMN_NAME
+	from	
+		information_schema.columns utc 
+	where
+		utc.table_schema='public' and
+		UPPER(utc.table_name)=UPPER(VTABLE) and
+		utc.column_name not in (select
+				a.attname as column_name
+			from
+				pg_class t,
+				pg_class i,
+				pg_index ix,
+				pg_attribute a
+			where
+				t.oid = ix.indrelid
+				and i.oid = ix.indexrelid
+				and a.attrelid = t.oid
+				and a.attnum = ANY(ix.indkey)
+				and t.relkind = 'r'
+				and upper(t.relname) =UPPER(VTABLE)) and
+	(UPPER(utc.column_name) like 'IDD_%'
+	or
+	UPPER(utc.column_name) like 'ID_%'
+	or
+	UPPER(utc.column_name) IN ('ID','AUD_FEC'))
+    	;
+	I integer:=1;    	
+	V_SQL varchar(32000);
+	VP integer:=0;
+	V_COUNT integer:=0;
+BEGIN
+	V_SQL:='';
+	if VCUBE = 0 then
+		FOR REG_COL IN T_COL(VTABLE)
+		LOOP
+			BEGIN
+				EXECUTE 'CREATE INDEX '||VTABLE||'_'||I||'_I ON '||VTABLE||'('||REG_COL.COLUMN_NAME||')';
+			EXCEPTION
+				WHEN OTHERS THEN NULL;
+			END;
+			I:=I+1;
+		END LOOP;
+		-- ADDITIONAL INDEX CREATION ON ID AND AUD_FEC TO IMPROVE LOADS CUBES
+		BEGIN
+			EXECUTE 'CREATE INDEX '||VTABLE||'_100_I ON '||VTABLE||'(id, aud_fec)';
+		EXCEPTION
+			WHEN OTHERS THEN NULL;
+		END;
+	ELSE
+		FOR REG_COL IN T_COL_CUBE(VTABLE,VCUBE)
+		LOOP
+			BEGIN
+			EXECUTE 'CREATE INDEX '||VTABLE||'_'||I||'_I ON '||VTABLE||'('||REG_COL.COLUMN_NAME||')';
+			EXCEPTION
+				WHEN OTHERS THEN NULL;
+			END;
+			I:=I+1;
+		END LOOP;
+	END IF;	
+END;
+$$ language plpgsql;

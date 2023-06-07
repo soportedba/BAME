@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pentahoba
+  labels:
+    app: pentahoba
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pentahoba
+  template:
+    metadata:
+      labels:
+        app: pentahoba
+    spec:
+      containers:
+      - name: pentahoba
+        image: bame/pentaho:6.1
+        ports:
+           - containerPort: 8080
+        imagePullPolicy: IfNotPresent
+        envFrom:
+          - configMapRef: 
+              name: cm-pentahoba
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pentahoba
+  labels:
+    app: pentahoba
+spec:
+  type: NodePort
+  ports:
+   - port: 8080
+  selector:
+   app: pentahoba
+  externalIPs: ["192.168.0.34"]        

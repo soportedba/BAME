@@ -1,0 +1,161 @@
+﻿CREATE OR REPLACE FUNCTION MTDT_LOAD_DDL (VCUBE IN integer DEFAULT 0, VPOST IN VARCHAR DEFAULT 'Y') RETURNS VOID AS $$
+DECLARE
+	V_SQL varchar(4000);
+	V_SELECT varchar(4000);
+	V_SELECT_VW varchar(4000);
+	V_NAME varchar(30);
+	V_STA_TABLE VARCHAR(100);
+	V_TYPE_DIM VARCHAR(100);
+	V_DESCRIPTION_DIM VARCHAR(100);
+	V_CUBE varchar(30);
+	V_HASH varchar(64);
+	V_ID_LOG integer;
+	V_ID_CUBE integer;
+	V_ID_DIMENSION integer;
+	V_TABLE varchar(100);
+	V_COLUMN varchar(100);
+	-- No scheduler will take into consideration when DDL 
+  C_DIMENSION CURSOR (VCUBE integer, VDEGEN_INCLUDED varchar)
+  IS
+    SELECT ID_DIMENSION,NAME, REPLACE(SQL, '#','''') AS VSQL, STA_TABLE, TYPE, DESCRIPTION
+    FROM
+    	MTDT_DIMENSION
+		WHERE
+			((VDEGEN_INCLUDED='Y' AND TYPE='DEGEN') OR 
+			(VDEGEN_INCLUDED='N' AND TYPE!='DEGEN') OR 
+			(VDEGEN_INCLUDED='ALL')) AND
+			ID_CUBE=(CASE WHEN VCUBE=0 THEN ID_CUBE ELSE VCUBE END) 
+    ORDER BY ID_DIMENSION;
+  C_CUBE CURSOR (VCUBE integer)
+  IS
+    SELECT ID_CUBE,NAME, TYPE
+    FROM
+    	MTDT_CUBE
+		WHERE
+			TYPE='INCREMENTAL' AND
+			ID_CUBE=(CASE WHEN VCUBE=0 THEN ID_CUBE ELSE VCUBE END) 
+    ORDER BY ID_CUBE;
+  C_CUBE_FILT CURSOR(V_ID_DIMENSION integer)
+  IS
+	SELECT C.NAME AS CUBE 
+	FROM 
+		MTDT_CUBE C, 
+		MTDT_DIMENSION CDC 
+	WHERE 
+		CDC.ID_CUBE=C.ID_CUBE AND 
+		CDC.ID_DIMENSION=V_ID_DIMENSION; 	
+  C_TABLA CURSOR(V_TABLA varchar)
+  IS
+	select (case 
+						when data_type in ('character','character varying','varchar') then 'cast('||chr(39)||'N/A'||chr(39)||' as '||data_type||')'
+						when data_type in ('bigint','integer','double precision') then 'cast(0 as '||data_type||')'
+						when upper(data_type) in ('USER-DEFINED', 'TEXT') and column_name like 'geom%' then 'cast('||chr(39)||'POINT(0 0)'||chr(39)||' as text)'
+						when data_type in ('timestamp without time zone','timestamp with time zone','date') then 'cast('||chr(39)||'1970-01-01'||chr(39)||' as '||data_type||')' 
+						when data_type in ('boolean') then 'cast('||chr(39)||'f'||chr(39)||' as '||data_type||')' 
+						when data_type in ('uuid') then 'cast('||chr(39)||'00000000-0000-0000-0000-000000000000'||chr(39)||' as '||data_type||')' 
+						else null
+						end) ||' as "'||column_name||'"' as columna,
+			'"'||column_name||'"' as columna_orig,
+			'"'||replace(column_name,'.','_')||'"' as columna_vw
+					from 
+						information_Schema.columns 
+					where 
+						table_name=V_TABLA and table_schema ='public' and upper(column_name) not like 'IDD_%'; 
+BEGIN
+	V_ID_LOG:=MTDT_LOG_REGISTRATION('I',0,V_SQL,'MTDT_LOAD_DDL(CUBE)',VCUBE||'');
+	FOR REG_COL IN C_CUBE(VCUBE)
+	LOOP
+		V_CUBE:=REG_COL.NAME;
+		V_ID_CUBE:=REG_COL.ID_CUBE;
+		-- We need to convert the ids of the dates (date_id, time_id, second_id, second_id, mic_id second) to a timestamp to compare with the data in the control table.
+		-- CONFIRM THE INDEX CREATION ON AUD_FEC, _ID
+		PERFORM MTDT_EXEC('CREATE INDEX '||V_CUBE||'_100_I ON '||V_CUBE||'(AUD_FEC,_ID)',VEXCEPT:='Y');
+		PERFORM MTDT_EXEC('CREATE INDEX '||V_CUBE||'_101_I ON '||V_CUBE||'(_ID)',VEXCEPT:='Y');
+		-- All dimensions except DEGEN
+		FOR REG_COL IN C_DIMENSION(V_ID_CUBE,'N')
+		LOOP
+			V_SQL:=REG_COL.VSQL;
+			V_NAME:=REG_COL.NAME;
+			V_STA_TABLE:=REG_COL.STA_TABLE;
+			V_TYPE_DIM:=REG_COL.TYPE;
+			-- HERE WE REGISTER THE CURRENT DATE ON THE LOG TABLE
+			-- We will have special treatment for TYPE dates
+			IF V_TYPE_DIM <>'D' THEN
+				V_SELECT:='SELECT cast('||chr(39)||'2200-12-31'||chr(39)||' as timestamp without time zone) AUD_FEC_FIN, 0 IDD_'||V_NAME;
+				V_SELECT_VW:='SELECT AUD_FEC_FIN, IDD_'||V_NAME;
+				FOR R IN C_TABLA(LOWER(V_STA_TABLE))
+				LOOP
+					V_SELECT:=V_SELECT||','||R.columna;
+					V_SELECT_VW:=V_SELECT_VW||','||R.columna_orig||' as '||R.columna_vw;
+				END LOOP;
+				PERFORM MTDT_EXEC('CREATE UNLOGGED TABLE DIM_'||V_NAME||' AS '||V_SELECT||';',VEXCEPT:='Y');
+				-- Views for dimensions to create a new abstraction layer due to "dot" notation in column_names problems with mondrian schemas.
+				PERFORM MTDT_EXEC('CREATE OR REPLACE VIEW DIM_'||V_NAME||'_VW AS '||V_SELECT_VW||' FROM DIM_'||V_NAME||';',VEXCEPT:='Y');
+				-- CONFIRM THE CREATION OF INDEX ON ID, AUD_FEC
+				PERFORM MTDT_EXEC('CREATE INDEX DIM_'||V_NAME||'_100_I ON DIM_'||V_NAME||'(_ID, AUD_FEC)' ,VEXCEPT:='Y');
+			END IF;
+		END LOOP;
+		-- CREATE CUBE AND CREATE INDEX
+		PERFORM MTDT_EXEC('select * from MTDT_LOAD_PRE_POST('||V_ID_CUBE||',''PRE'',''CUBE'')');
+		PERFORM MTDT_EXEC('CREATE UNLOGGED TABLE '||V_CUBE||' AS SELECT A.* FROM '||V_CUBE||'_VW A WHERE 0=1',VEXCEPT:='Y');
+		PERFORM MTDT_EXEC('CREATE INDEX '||V_CUBE||'_100_I ON '||V_CUBE||'(AUD_FEC,_ID)',VEXCEPT:='Y');
+		IF VPOST='Y' THEN
+			-- CUBE INDEXES CREATION
+			PERFORM MTDT_EXEC('SELECT * from MTDT_INDEXES('''||V_CUBE||''','||V_ID_CUBE||')',VEXCEPT:='Y');
+		END IF;
+		-- All dimensions except DEGEN
+		FOR REG_COL IN C_DIMENSION(V_ID_CUBE,'N')
+		LOOP
+			V_TYPE_DIM:=REG_COL.TYPE;
+			V_NAME:=REG_COL.NAME;
+			-- When type=REFER, use description as table_name
+			V_DESCRIPTION_DIM:=REG_COL.DESCRIPTION;
+			IF V_TYPE_DIM='REFER' THEN
+				V_TABLE=V_DESCRIPTION_DIM;
+				V_COLUMN=V_NAME;
+			ELSIF V_TYPE_DIM='IDD' THEN
+				V_TABLE='DIM_'||V_NAME;
+				V_COLUMN='IDD_'||V_NAME;
+			ELSE
+				V_TABLE='DIM_'||V_NAME;
+				V_COLUMN=V_NAME;
+			END IF;	  
+			/* The relationships between table of facts and normal dimensions through the IDD_*/
+			IF V_TYPE_DIM<>'D' THEN
+				IF V_TYPE_DIM <>'REFER' THEN
+					PERFORM MTDT_EXEC('CREATE INDEX '||V_TABLE||'_PK ON '||V_TABLE||'('||V_COLUMN||') ' ,VEXCEPT:='Y');
+					PERFORM MTDT_EXEC('ALTER TABLE '||V_TABLE||' ADD CONSTRAINT '||V_COLUMN||'_PK PRIMARY KEY ('||V_COLUMN||') ',VEXCEPT:='Y');
+				END IF;
+				IF V_TYPE_DIM<>'SNOW' THEN
+					FOR VCDC IN C_CUBE_FILT(REG_COL.ID_DIMENSION)
+					LOOP
+						BEGIN
+							SELECT md5(VCDC.CUBE||'_'||V_COLUMN) INTO V_HASH;
+							PERFORM MTDT_EXEC('ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_COLUMN||') REFERENCES '||V_TABLE||'('||V_COLUMN||') DEFERRABLE INITIALLY IMMEDIATE' ,VEXCEPT:='Y');
+						END;
+					END LOOP;
+				END IF;
+				IF VPOST='Y' AND V_TYPE_DIM <>'REFER' THEN
+					PERFORM MTDT_EXEC('SELECT * from MTDT_INDEXES('''||V_TABLE||''')',VEXCEPT:='Y');
+				end if;
+			ELSE
+				/* For TYPE date D, the dimension table must have in NAME the NAME of column pk (eg date_id)
+					And in DESCRIPTION the NAME of the table without CB_DIM_ (eg dates, hour_minute)*/
+				/* It can be improved by including a previous existence check of indexes / pks / fks*/
+				PERFORM MTDT_EXEC('CREATE INDEX CB_DIM_'||V_NAME||'_PK ON CB_DIM_'||V_DESCRIPTION_DIM||'('||V_NAME||') ' ,VEXCEPT:='Y');
+				PERFORM MTDT_EXEC('ALTER TABLE CB_DIM_'||V_DESCRIPTION_DIM||' ADD CONSTRAINT '||V_NAME||'_PK PRIMARY KEY ('||V_NAME||') ' ,VEXCEPT:='Y');
+				FOR VCDC IN C_CUBE_FILT(REG_COL.ID_DIMENSION)
+				LOOP
+					SELECT md5(VCDC.CUBE||'_IDD_'||V_NAME) INTO V_HASH;
+					PERFORM MTDT_EXEC('ALTER TABLE '||VCDC.CUBE||' ADD CONSTRAINT FK_'||V_HASH||' FOREIGN KEY ('||V_NAME||') REFERENCES CB_DIM_'||V_DESCRIPTION_DIM||'('||V_NAME||') DEFERRABLE INITIALLY IMMEDIATE',VEXCEPT:='Y');
+				END LOOP;
+				IF VPOST='Y' THEN
+						PERFORM MTDT_EXEC('SELECT * from MTDT_INDEXES(''CB_DIM_'||V_DESCRIPTION_DIM||''')',VEXCEPT:='Y');
+				end if;
+			END IF;
+		END LOOP;
+		V_ID_LOG:=MTDT_LOG_REGISTRATION('U',V_ID_LOG,'','','');
+	END LOOP;
+END;
+$$ language plpgsql;
+

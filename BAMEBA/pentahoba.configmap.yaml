@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-pentahoba
+data:
+  TIMEZONE: "Europe/Madrid"
+  DB_USER: bame
+  DB_PASS: bame12345678
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  INSTALL_PLUGINS: "true"
+

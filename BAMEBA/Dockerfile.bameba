@@ -1,0 +1,19 @@
+FROM bame/pentaho_base:6.1
+
+ENV PENTAHO_HOME /pentaho
+
+RUN mkdir $PENTAHO_HOME/conf && \
+	mkdir $PENTAHO_HOME/BAMEBA.docker
+
+COPY conf $PENTAHO_HOME/conf
+COPY BAMEBA.docker $PENTAHO_HOME/BAMEBA.docker
+
+COPY entrypoint.sh /entrypoint.sh
+
+VOLUME /pentaho-data
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["run"]

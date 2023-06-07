@@ -1,0 +1,239 @@
+﻿CREATE OR REPLACE function MTDT_GEN_XML_CUBE (V_ID_CUBE integer) 
+RETURNS VOID AS $$
+DECLARE
+  C_DIMENSION CURSOR  (V_ID_CUBE integer)
+  IS
+	SELECT 
+		NAME, 
+		DESCRIPTION,
+		DESCRIPTION_LONG, 
+		TYPE, 
+		ID_DIMENSION,
+		lower(case 
+			when upper(NAME) like 'ID_FDATE%' then 'ID_FDATE'
+			when upper(NAME) like 'ID_HOUR_MINUTE%' then 'ID_HOUR_MINUTE'
+			when upper(NAME) like 'ID_SECOND%' then 'ID_SECOND'
+			when upper(NAME) like 'ID_MILISECOND%' then 'ID_MILISECOND'
+			when upper(NAME) like 'ID_MICROSECOND%' then 'ID_MICROSECOND'
+			else 'ERROR'
+		end) as date_id_pk
+	FROM 
+		(SELECT 
+				lower(D.NAME) as NAME , 
+				translate(upper(d.DESCRIPTION),'ÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛ','AEIOUAEIOUAEIOUAEIOU') DESCRIPTION ,
+				translate(upper(d.DESCRIPTION_LONG),'ÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛ','AEIOUAEIOUAEIOUAEIOU') DESCRIPTION_LONG  ,
+				TYPE, d.id_dimension
+		FROM 
+			MTDT_DIMENSION D
+		WHERE 
+			D.ID_CUBE=V_ID_CUBE 
+			AND D.TYPE<>'REFER'
+		UNION
+		SELECT 
+				lower(D.NAME) as NAME , 
+				translate(upper(d.DESCRIPTION),'ÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛ','AEIOUAEIOUAEIOUAEIOU') DESCRIPTION , 
+				translate(upper(d.DESCRIPTION_LONG),'ÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛ','AEIOUAEIOUAEIOUAEIOU') DESCRIPTION_LONG  ,
+				D.TYPE, 
+				d.id_dimension
+		FROM 
+			MTDT_DIMENSION D,
+			MTDT_DIMENSION DP
+		WHERE 
+			DP.ID_CUBE=V_ID_CUBE 
+			AND DP.ID_DIMENSION_REFER=D.ID_DIMENSION
+			AND DP.TYPE='REFER') D
+    ORDER BY D.ID_DIMENSION;
+  C_INDICADOR CURSOR (V_ID_CUBE integer)
+  IS
+    SELECT ID_INDICATOR, lower(NAME) as NAME, translate(upper(DESCRIPTION),'ÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÂÊÎÔÛ','AEIOUAEIOUAEIOUAEIOU') DESCRIPTION , LOWER(SQL_GROUP) SQL_GROUP
+    FROM 
+    	MTDT_INDICATOR
+    WHERE ID_CUBE=V_ID_CUBE 
+    ORDER BY ID_INDICATOR;
+  C_CLOSURES CURSOR  (V_ID_DIMENSION integer)
+  IS
+    SELECT lower(DIDD.TAB_DIM1||'_'||DIDD.TAB_DIM1_COL_IDD) as NAME , LOWER(TAB_DIM1_COL_IDD) PARENT_ID
+    FROM 
+    	MTDT_DIMENSION_IDD DIDD
+    WHERE 
+    	DIDD.ID_DIMENSION=V_ID_DIMENSION
+		AND DIDD.TAB_DIM1=DIDD.TAB_DIM2
+    ORDER BY DIDD.ID_DIMENSION_IDD;	
+  C_COLUMNAS CURSOR (V_ID_DIMENSION integer)
+  IS
+    SELECT column_name, (case when data_type IN ('integer','bigint') then 'Integer' 
+							  when data_type='double precision' then 'Numeric'
+						  else 'String' end) as data_type
+	FROM 
+		information_schema.columns 
+	where 
+		upper(table_name)=(select upper('DIM_'||NAME) FROM MTDT_dimension where ID_DIMENSION=V_ID_DIMENSION) 
+		and table_schema ='public' 
+		and upper(column_name) NOT IN (select upper('IDD_'||NAME) FROM MTDT_dimension where ID_DIMENSION=V_ID_DIMENSION) 
+		-- We ordered to be at the end the regisors aud_fec, aud_fec_fin
+	ORDER BY (case when column_name in ('_id','aud_fec', 'aud_fec_fin','createdAt') then 9999 else ordinal_position end);	
+  C_COLUMNAS_FEC CURSOR (V_ID_DIMENSION integer)
+  IS
+    SELECT column_name
+	FROM 
+		information_schema.columns 
+	where 
+		upper(table_name)=(select upper('DIM_'||SUBSTR((case 
+															when upper(NAME) like 'ID_FDATE%' then 'ID_FDATE'
+															when upper(NAME) like 'ID_HOUR_MINUTE%' then 'ID_HOUR_MINUTE'
+															when upper(NAME) like 'ID_SECOND%' then 'ID_SECOND'
+															when upper(NAME) like 'ID_MILISECOND%' then 'ID_MILISECOND'
+															when upper(NAME) like 'ID_MICROSECOND%' then 'ID_MICROSECOND'
+															else 'ERROR'
+														end),4)) FROM MTDT_dimension where ID_DIMENSION=V_ID_DIMENSION) 
+		and table_schema ='public' 
+		and upper(column_name) NOT IN (select (case 
+													when upper(NAME) like 'ID_FDATE%' then 'ID_FDATE'
+													when upper(NAME) like 'ID_HOUR_MINUTE%' then 'ID_HOUR_MINUTE'
+													when upper(NAME) like 'ID_SECOND%' then 'ID_SECOND'
+													when upper(NAME) like 'ID_MILISECOND%' then 'ID_MILISECOND'
+													when upper(NAME) like 'ID_MICROSECOND%' then 'ID_MICROSECOND'
+													else 'ERROR'
+												end) FROM MTDT_dimension where ID_DIMENSION=V_ID_DIMENSION) 
+	ORDER BY (case 
+				when column_name like '%year%' then 10
+				when column_name like '%semester%' then 20
+				when column_name like '%trimest%' then 30
+				when column_name like '%month%' then 40
+				when column_name like '%day%' then 50
+				when column_name like '%date%' then 60
+				when column_name like '%hour%' then 70
+				when column_name like '%minut%' then 80
+				when column_name like '%second%' then 90
+				when column_name like '%milisec%' then 100
+				when column_name like '%microsec%' then 110
+				else ordinal_position
+			end);
+V_DIM_XML varchar(32000);   
+V_IND_XML varchar(32000); 
+V_IND_XML_aux varchar(4000); 
+V_CUBE varchar(4000);
+V_ORD integer;
+-- fila cm_infraest_dim_kpis%rowtype;
+BEGIN
+	V_ORD:=1;
+	-- FOR A ID_CUBE, IT CREATES THE CREATE TABLE JUDGMENT AS A FUNCTION OF THE ASSOCIATED INDICATORS AND DIMENSIONS
+	V_DIM_XML:=' '; 
+	V_IND_XML:=' '; 
+	execute 'delete from MTDT_CUBE_XML';
+	SELECT '<Cube name="'||NAME||'" caption="'||DESCRIPTION||'" description="'||DESCRIPTION||'" cache="true" enabled="true">'||chr(10)||'<Table name="'||lower(NAME)||'" schema="public"></Table>' INTO V_CUBE FROM MTDT_CUBE WHERE ID_CUBE=V_ID_CUBE;	
+	execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||SUBSTR(V_CUBE,1,4000)||chr(39)||')';
+	V_ORD:=V_ORD+1;
+	FOR REG_COL IN C_DIMENSION(V_ID_CUBE)
+	LOOP
+			while length(V_DIM_XML)>0 loop
+				execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||SUBSTR(V_DIM_XML,1,4000)||chr(39)||')';
+				V_DIM_XML:=SUBSTR(V_DIM_XML,4001,32000);
+				V_ORD:=V_ORD+1;	
+			end loop;
+		-- DIMENSIONS CONTROL BY TYPE
+		IF REG_COL.TYPE='D' THEN 
+			SELECT NAME INTO V_CUBE FROM MTDT_CUBE WHERE ID_CUBE=V_ID_CUBE;
+	    V_DIM_XML:=V_DIM_XML||'<Dimension type="StandardDimension" foreignKey="'||REG_COL.NAME||'" highCardinality="false" name="'||REG_COL.DESCRIPTION_LONG||'">'||chr(10)|| 
+	     	'<Hierarchy name="'||REG_COL.DESCRIPTION_LONG||'" hasAll="true" primaryKey="'||REG_COL.date_id_pk||'">'||chr(10)|| 
+			  '  <Table name="dim_'||SUBSTR(REG_COL.date_id_pk,4)||'" schema="public">'||chr(10)|| 
+			  '  </Table>'||chr(10);
+			  for reg_columna in C_COLUMNAS_FEC(reg_col.id_dimension)
+			  loop
+				V_DIM_XML:=V_DIM_XML||'  <Level name="'||REG_COL.DESCRIPTION||'_'||REG_COLUMNA.COLUMN_NAME||'" table="dim_'||SUBSTR(REG_COL.date_id_pk,4)||'" column="'||REG_COLUMNA.COLUMN_NAME||'" type="String" uniqueMembers="false" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||'_'||REG_COLUMNA.COLUMN_NAME||'">'||chr(10)|| 
+				'  </Level>'||chr(10);
+			  end loop;			  
+			  V_DIM_XML:=V_DIM_XML||'</Hierarchy>'||chr(10)|| 
+			'</Dimension>';
+		ELSIF REG_COL.TYPE='I' THEN 
+		-- ID_KPI, type, procedure, indicator, sub-indicator
+			SELECT NAME INTO V_CUBE FROM MTDT_CUBE WHERE ID_CUBE=V_ID_CUBE;
+	    V_DIM_XML:=V_DIM_XML||'<Dimension type="StandardDimension" foreignKey="'||REG_COL.NAME||'" highCardinality="false" name="'||REG_COL.DESCRIPTION||'">'||chr(10)|| 
+	      '<Hierarchy name="'||REG_COL.DESCRIPTION||'" hasAll="true" primaryKey="ID_KPI">'||chr(10)|| 
+	      '  <Table name="'||V_CUBE||'_DIM_KPIS" schema="public">'||chr(10)|| 
+	      '  </Table>'||chr(10)|| 
+	      '  <Level name="TYPE" table="'||V_CUBE||'_DIM_KPIS" column="TYPE" type="String" uniqueMembers="true" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||', TYPE">'||chr(10)|| 
+	      '  </Level>'||chr(10)|| 
+	      '  <Level name="PROCEDIMIENTO" table="'||V_CUBE||'_DIM_KPIS" column="PROCEDIMIENTO" type="String" uniqueMembers="true" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||', Procedimiento">'||chr(10)|| 
+	      '  </Level>'||chr(10)|| 
+	      '  <Level name="INDICADOR" table="'||V_CUBE||'_DIM_KPIS" column="INDICADOR" type="String" uniqueMembers="true" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||', Indicador">'||chr(10)|| 
+	      '  </Level>'||chr(10)|| 
+	      '  <Level name="SUBINDICADOR" table="'||V_CUBE||'_DIM_KPIS" column="SUBINDICADOR" type="String" uniqueMembers="true" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||', Subindicador">'||chr(10)|| 
+	      '  </Level>'||chr(10)|| 
+	      '</Hierarchy>'||chr(10)|| 
+	    '</Dimension>';
+		-- ELSIF REG_COL.TYPE='DEGEN' THEN
+		-- 	V_DIM_XML:=V_DIM_XML||'<Dimension type="StandardDimension" highCardinality="false" name="'||REG_COL.DESCRIPTION||'">'||chr(10)|| 
+		-- 	  '<Hierarchy name="'||REG_COL.DESCRIPTION||'" hasAll="true" >'||chr(10);
+		-- 		V_DIM_XML:=V_DIM_XML||'  <Level name="'||REG_COL.NAME||'" column="'||REG_COL.NAME||'" uniqueMembers="true" levelType="Regular" hideMemberIf="Never" description="'||REG_COL.DESCRIPTION||'">'||chr(10)|| 
+		-- 		'  </Level>'||chr(10);
+		-- 		V_DIM_XML:=V_DIM_XML||'</Hierarchy>'||chr(10)|| 	
+		-- 		'</Dimension>';
+		-- For IDD dimensions, it will get data from _vw views, with replacemente of "dot"
+		ELSIF REG_COL.TYPE='IDD' THEN
+			V_DIM_XML:=V_DIM_XML||'<Dimension type="StandardDimension" foreignKey="idd_'||REG_COL.NAME||'" highCardinality="false" name="'||REG_COL.DESCRIPTION||'">'||chr(10)|| 
+			  '<Hierarchy name="'||REG_COL.DESCRIPTION||'" hasAll="true" primaryKey="idd_'||REG_COL.NAME||'">'||chr(10)|| 
+			  '  <Table name="dim_'||REG_COL.NAME||'_vw" schema="public">'||chr(10)|| 
+			  '  </Table>'||chr(10);
+				for reg_columna in C_COLUMNAS(reg_col.id_dimension)
+				loop
+				V_DIM_XML:=V_DIM_XML||'  <Level name="'||replace(REG_COLUMNA.COLUMN_NAME,'.','_')||'" table="dim_'||REG_COL.NAME||'_vw" column="'||replace(REG_COLUMNA.COLUMN_NAME,'.','_')||'" type="'||REG_COLUMNA.data_type||'" uniqueMembers="false" levelType="Regular" hideMemberIf="Never" description="'||replace(REG_COLUMNA.COLUMN_NAME,'.','_')||'">'||chr(10)|| 
+				'  </Level>'||chr(10);
+				end loop;			  
+				V_DIM_XML:=V_DIM_XML||'</Hierarchy>'||chr(10)|| 	
+				'</Dimension>';
+		ELSE
+			V_DIM_XML:=V_DIM_XML||'<Dimension type="StandardDimension" foreignKey="'||REG_COL.NAME||'" highCardinality="false" name="'||REG_COL.DESCRIPTION||'">'||chr(10)|| 
+			  '<Hierarchy name="'||REG_COL.DESCRIPTION||'" hasAll="true" primaryKey="'||REG_COL.NAME||'">'||chr(10)|| 
+			  '  <Table name="dim_'||REG_COL.NAME||'" schema="public">'||chr(10)|| 
+			  '  </Table>'||chr(10);
+				for reg_columna in C_COLUMNAS(reg_col.id_dimension)
+				loop
+				V_DIM_XML:=V_DIM_XML||'  <Level name="'||REG_COLUMNA.COLUMN_NAME||'" table="dim_'||REG_COL.NAME||'" column="'||REG_COLUMNA.COLUMN_NAME||'" type="'||REG_COLUMNA.data_type||'" uniqueMembers="false" levelType="Regular" hideMemberIf="Never" description="'||REG_COLUMNA.COLUMN_NAME||'">'||chr(10)|| 
+				'  </Level>'||chr(10);
+				end loop;			  
+				V_DIM_XML:=V_DIM_XML||'</Hierarchy>'||chr(10)|| 	
+				'</Dimension>';
+		END IF;
+		-- CLOSURE DIMENSIONS
+		for reg_columna in C_CLOSURES(reg_col.id_dimension)
+		loop
+			V_DIM_XML:=V_DIM_XML||chr(10)||'<Dimension foreignKey="idd_'||REG_COL.NAME||'" name="'||upper(REG_COLumna.NAME)||'">'||chr(10)|| 
+			  '<Hierarchy name="'||upper(REG_COLumna.NAME)||'" hasAll="true" primaryKey="idd_'||REG_COL.NAME||'">'||chr(10)|| 
+			  '  <Table name="dim_'||REG_COL.NAME||'" schema="public">'||chr(10)|| 
+			  '  </Table>'||chr(10);
+				V_DIM_XML:=V_DIM_XML||'  <Level name="'||upper(REG_COLUMNA.NAME)||'" column="idd_'||REG_COL.NAME||'" nameColumn="id" parentColumn="'||REG_COLUMNA.parent_id||'" type="Integer" uniqueMembers="true" description="'||REG_COLUMNA.NAME||'">'||chr(10)|| 
+					' <Closure parentColumn="parent_id" childColumn="child_id"> '||CHR(10)||
+					' <Table name="'||REG_COLUMNA.NAME||'"/>'||CHR(10)||
+					'</Closure>'||CHR(10)||
+				'  </Level>'||chr(10);
+			  V_DIM_XML:=V_DIM_XML||'</Hierarchy>'||chr(10)|| 	
+			'</Dimension>';
+		end loop;
+	END LOOP;
+	while length(V_DIM_XML)>0 loop
+		execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||SUBSTR(V_DIM_XML,1,4000)||chr(39)||')';
+		V_DIM_XML:=SUBSTR(V_DIM_XML,4001,32000);
+		V_ORD:=V_ORD+1;	
+	end loop;
+	FOR REG_COL_CUBE IN C_INDICADOR(V_ID_CUBE)
+	LOOP
+		V_IND_XML:=V_IND_XML||'<Measure name="'||REG_COL_CUBE.DESCRIPTION||'" column="'||REG_COL_CUBE.NAME||'" aggregator="'||REG_COL_CUBE.SQL_GROUP||'" description="'||REG_COL_CUBE.DESCRIPTION||'" visible="true">'||chr(10)||
+    	'</Measure>'; 
+			while length(V_IND_XML)>0 loop
+				execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||SUBSTR(V_IND_XML,1,4000)||chr(39)||')';
+				-- insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values (V_ID_CUBE, V_ORD,SUBSTR(V_IND_XML,1,4000));
+				-- commit;
+				V_IND_XML:=SUBSTR(V_IND_XML,4001,32000);
+				V_ORD:=V_ORD+1;	
+			end loop;
+	END LOOP;
+	while length(V_DIM_XML)>0 loop
+		v_ind_xml_aux:=SUBSTR(V_IND_XML,1,4000);
+		execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||V_IND_XML_aux||chr(39)||')';
+		V_IND_XML:=SUBSTR(V_IND_XML,4001,32000);
+		V_ORD:=V_ORD+1;	
+	end loop;
+	execute 'insert into MTDT_CUBE_XML (ID_CUBE,ORD,XML) values ('||V_ID_CUBE||','|| V_ORD||','||chr(39)||'</Cube>'||chr(39)||')';
+END;	
+$$ language plpgsql;
