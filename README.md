@@ -77,6 +77,7 @@ kubectl apply -f BAMEBa/pentahoba.yaml
 ```
 
 * PentahoPDI (ETL solution, metadata driven)
+
 ETLS should include their default scheduler policy, inbuilt, so each container will run only for that related scheduler
 ```
 cd BAMEEtl
@@ -87,7 +88,7 @@ kubectl apply -f BAMEEtl/pentahopdi.configmap.yaml
 kubectl apply -f BAMEEtl/pentahopdi.DWH.yaml 
 ```
 
-Schedulers: setting concurrencyPolicy: Forbid to avoid multiple jobs generation when failing job, it keeps retrying, but not creating new threads
+Schedulers: setting "concurrencyPolicy: Forbid" to avoid multiple jobs generation when failing job, it keeps retrying, but not creating new threads
 To suspend cron job in kubernetes if necesary:
 ```
 kubectl patch cronjobs dwh -p "{\"spec\" : {\"suspend\" : true }}"
