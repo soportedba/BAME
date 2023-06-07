@@ -64,6 +64,36 @@ kubectl get pvc mysql-pv-claim
 kubectl exec -it pod/mysql-0 -- /bin/bash
 ```
 
+* PentahoBA (Business Analytics solution)
+
+Deploy PentahoBA as Business Analytics solution
+```
+cd BAMEBa
+docker build --no-cache -t bame/pentaho_base:6.1 -f Dockerfile .
+docker build --no-cache -t bame/pentaho:6.1 -f Dockerfile.bameba .
+cd ..
+kubectl apply -f BAMEBa/pentahoba.configmap.yaml
+kubectl apply -f BAMEBa/pentahoba.yaml
+```
+
+* PentahoPDI (ETL solution, metadata driven)
+ETLS should include their default scheduler policy, inbuilt, so each container will run only for that related scheduler
+```
+cd BAMEEtl
+docker build --no-cache -t bame/pentaho_base_etl:8.3 -f Dockerfile .
+docker build --no-cache -t bame/pentahopdi:8.3 -f Dockerfile.bameetl .
+cd ..
+kubectl apply -f BAMEEtl/pentahopdi.configmap.yaml
+kubectl apply -f BAMEEtl/pentahopdi.DWH.yaml 
+```
+
+Schedulers: setting concurrencyPolicy: Forbid to avoid multiple jobs generation when failing job, it keeps retrying, but not creating new threads
+To suspend cron job in kubernetes if necesary:
+```
+kubectl patch cronjobs dwh -p "{\"spec\" : {\"suspend\" : true }}"
+kubectl patch cronjobs dwh -p "{\"spec\" : {\"suspend\" : false }}"
+```
+
 * Example application (Facturascripts)
 
 Application deployment, will use Facturascripts (ERP system) as application example.
