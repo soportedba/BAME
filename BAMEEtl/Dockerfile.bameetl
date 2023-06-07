@@ -1,0 +1,14 @@
+FROM bame/pentaho_base_etl:8.3
+
+ENV PENTAHO_HOME /pentahoetl
+
+RUN mkdir $PENTAHO_HOME/90.PDI_Loaders 
+
+COPY 90.PDI_Loaders $PENTAHO_HOME/90.PDI_Loaders
+COPY entrypoint.sh /entrypoint.sh
+
+VOLUME /pentahoetl
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["run"]
