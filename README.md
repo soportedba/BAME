@@ -95,6 +95,14 @@ kubectl patch cronjobs dwh -p "{\"spec\" : {\"suspend\" : true }}"
 kubectl patch cronjobs dwh -p "{\"spec\" : {\"suspend\" : false }}"
 ```
 
+* LogConsolidation with ELK stack
+
+```
+kubectl apply -f BAMELogging/elasticsearch.storage.yaml
+kubectl apply -f BAMELogging/fluentd-config.yaml
+kubectl apply -f BAMELogging/elasticStack.yaml
+```
+
 * Example application (Facturascripts)
 
 Application deployment, will use Facturascripts (ERP system) as application example.
