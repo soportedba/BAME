@@ -123,6 +123,7 @@ service/kubernetes       ClusterIP   10.96.0.1       <none>         443/TCP     
 service/mysql            NodePort    10.106.250.4    192.168.0.34   3306:32762/TCP   4h34m
 service/postgres         NodePort    10.104.56.37    192.168.0.34   5432:30636/TCP   4h40m
 service/utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/TCP   4h38m
+...
 ```
 
 * To access postgresql database:
@@ -131,6 +132,9 @@ service/utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/T
 	* You can use: 192.168.0.34:32762 externally from k8s, or name "mysql" with default port: 3306 if accessing internally from k8s.
 * To access Facturascripts:
 	* From a web browser: 192.168.0.34:32749 externally from k8s.
-
+* To access MetadataETL
+	* From a web browser: http://192.168.0.34:30477/metadataEtl
+* To access PentahoBA
+	* From a web browser: http://192.168.0.34:30477/pentaho/Home
 
 
