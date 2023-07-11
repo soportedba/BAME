@@ -138,3 +138,4 @@ service/utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/T
 	* From a web browser: http://192.168.0.34:30477/pentaho/Home
 
 
+test
