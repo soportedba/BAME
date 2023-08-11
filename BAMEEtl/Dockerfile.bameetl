@@ -1,4 +1,4 @@
-FROM bame/pentaho_base_etl:8.3
+FROM bame/pentaho_base_etl:9.3
 
 ENV PENTAHO_HOME /pentahoetl
 

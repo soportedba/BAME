@@ -16,13 +16,13 @@ spec:
     spec:
       containers:
       - name: pentahoba
-        image: bame/pentaho:6.1
+        image: bame/pentaho:9.3
         ports:
            - containerPort: 8080
         imagePullPolicy: IfNotPresent
         envFrom:
           - configMapRef: 
-              name: cm-pentahoba
+              name: cm-pentahoba         
 ---
 apiVersion: v1
 kind: Service
@@ -36,4 +36,4 @@ spec:
    - port: 8080
   selector:
    app: pentahoba
-  externalIPs: ["192.168.0.34"]        
+  externalIPs: ["192.168.0.10"]        

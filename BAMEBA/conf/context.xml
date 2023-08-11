@@ -15,19 +15,6 @@
     name="jdbc/Hibernate"/>
 
   <Resource validationQuery="select 1"
-    url="jdbc:postgresql://**host**:5432/hibernate"
-    driverClassName="org.postgresql.Driver"
-    password="**password**"
-    username="hibuser"
-    maxWait="10000"
-    maxIdle="5"
-    maxActive="20"
-    factory="org.apache.commons.dbcp.BasicDataSourceFactory"
-    type="javax.sql.DataSource"
-    auth="Container"
-    name="jdbc/Audit"/>
-
-  <Resource validationQuery="select 1"
     url="jdbc:postgresql://**host**:5432/quartz"
     driverClassName="org.postgresql.Driver"
     password="**password**"
@@ -40,29 +27,11 @@
     auth="Container"
     name="jdbc/Quartz"/>
 
-  <Resource validationQuery="select 1"
-    url="jdbc:postgresql://**host**:5432/hibernate"
-    driverClassName="org.postgresql.Driver"
-    password="**password**"
-    username="hibuser"
-    maxWait="10000"
-    maxIdle="5"
-    maxActive="20"
-    factory="org.apache.commons.dbcp.BasicDataSourceFactory"
-    type="javax.sql.DataSource"
-    auth="Container"
-    name="jdbc/pentaho_operations_mart"/>
+	<Resource name="jdbc/jackrabbit" auth="Container" type="javax.sql.DataSource"
+		factory="org.apache.commons.dbcp.BasicDataSourceFactory" maxActive="20" minIdle="0"
+		maxIdle="5" initialSize="0"
+		maxWait="10000" username="jcr_user" password="**password**"
+		driverClassName="org.postgresql.Driver" url="jdbc:postgresql://**host**:5432/jackrabbit"
+		validationQuery="select 1"/>
 
-  <Resource validationQuery="select 1"
-    url="jdbc:postgresql://**host**:5432/hibernate"
-    driverClassName="org.postgresql.Driver"
-    password="**password**"
-    username="hibuser"
-    maxWait="10000"
-    maxIdle="5"
-    maxActive="20"
-    factory="org.apache.commons.dbcp.BasicDataSourceFactory"
-    type="javax.sql.DataSource"
-    auth="Container"
-    name="jdbc/PDI_Operations_Mart"/>
 </Context>

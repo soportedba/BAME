@@ -41,4 +41,4 @@ spec:
    - port: 80
   selector:
    app: facturascripts
-  externalIPs: ["192.168.0.34"]        
+  externalIPs: ["192.168.0.10"]        

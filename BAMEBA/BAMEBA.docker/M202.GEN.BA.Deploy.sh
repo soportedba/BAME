@@ -68,38 +68,40 @@ fi
 
 function config_pentahoBA(){
 	echo "Configuring PentahoBA"
-sed -i "s/^mondrian.rolap.aggregates.Use.*/mondrian.rolap.aggregates.Use=true/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/mondrian/mondrian.properties
-sed -i "s/^mondrian.rolap.aggregates.Read.*/mondrian.rolap.aggregates.Read=true/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/mondrian/mondrian.properties
-sed -i "s/^mondrian.result.limit.*/mondrian.result.limit=50000000/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/mondrian/mondrian.properties
-sed -i "s/^mondrian.rolap.queryTimeout.*/mondrian.rolap.queryTimeout=600/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/mondrian/mondrian.properties
-sed -i "s/^mondrian.rolap.maxConstraints.*/mondrian.rolap.maxConstraints=100000/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/mondrian/mondrian.properties
-sed -i "s/-Xms2048m -Xmx6144m -XX:MaxPermSize=256m/-Xms${arr["ba.pentahoba.memorymin"]}m -Xmx${arr["ba.pentahoba.memory"]}m -XX:MaxPermSize=256m/g" ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/start-pentaho.sh
+sed -i "s/^mondrian.rolap.aggregates.Use.*/mondrian.rolap.aggregates.Use=true/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/mondrian/mondrian.properties
+sed -i "s/^mondrian.rolap.aggregates.Read.*/mondrian.rolap.aggregates.Read=true/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/mondrian/mondrian.properties
+sed -i "s/^mondrian.result.limit.*/mondrian.result.limit=50000000/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/mondrian/mondrian.properties
+sed -i "s/^mondrian.rolap.queryTimeout.*/mondrian.rolap.queryTimeout=600/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/mondrian/mondrian.properties
+sed -i "s/^mondrian.rolap.maxConstraints.*/mondrian.rolap.maxConstraints=100000/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/mondrian/mondrian.properties
+sed -i "s/-Xms2048m -Xmx6144m -XX:MaxPermSize=256m/-Xms${arr["ba.pentahoba.memorymin"]}m -Xmx${arr["ba.pentahoba.memory"]}m -XX:MaxPermSize=256m/g" ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/start-pentaho.sh
 
 
-if [ ! -f ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/lib/postgresql-42.2.5.jar ]; then
+if [ ! -f ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/lib/postgresql-42.2.5.jar ]; then
 	echo "Installing postgresql jdbc 42.2.5 driver (to remove bug when creating multiple connections from java pentahoba)"
-	wget -r -np -N https://jdbc.postgresql.org/download/postgresql-42.2.5.jar -q -O ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/lib/postgresql-42.2.5.jar
-	rm -rf ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/lib/postgresql-9.3-1102-jdbc4.jar
+	wget -r -np -N https://jdbc.postgresql.org/download/postgresql-42.2.5.jar -q -O ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/lib/postgresql-42.2.5.jar
+	rm -rf ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/lib/postgresql-9.3-1102-jdbc4.jar
 fi
 
+
 echo "Configuring Saiku and Waqr plugins"
-cd ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/
-cp ${arr["ba.deploy.files"]}/saiku-plugin-p6-3.9-RC1.zip saiku-plugin-p6-3.9-RC1.zip
-unzip -oq saiku-plugin-p6-3.9-RC1.zip
-rm -rf saiku-plugin-p6-3.9-RC1.zip
-unzip -oq ${arr["ba.deploy.files"]}/waqr-plugin-package-TRUNK-SNAPSHOT.zip -d ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/pentaho-solutions/system/
+cd ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/
+cp ${arr["ba.deploy.files"]}/saiku-plugin-p7.1-3.90.zip saiku-plugin-p7.1-3.90.zip
+unzip -oq saiku-plugin-p7.1-3.90.zip
+rm -rf saiku-plugin-p7.1-3.90.zip
+# Waqr not in use
+#unzip -oq ${arr["ba.deploy.files"]}/waqr-plugin-package-TRUNK-SNAPSHOT.zip -d ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/pentaho-solutions/system/
 if [ ! -f saiku/license.lic ];then 
 	cp -f ${arr["ba.deploy.files"]}/license_saiku.lic saiku/license.lic
 fi;
 
 
 cd saiku
-mv lib/saiku-olap-util-3.9-RC1.jar ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/pentaho/WEB-INF/lib/
+mv lib/saiku-olap-util-3.90.jar ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/pentaho/WEB-INF/lib/
 mv lib/mondrian-3.11.0.0-353.jar lib/mondrian-3.11.0.0-353.jar.bak
 sed -i "s/.*datasourceResolverClass.*PentahoDataSourceResolver.*//g" plugin.spring.xml
 
 #DSP
-cd ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/pentaho/WEB-INF
+cd ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/pentaho/WEB-INF
 cp -f ${arr["ba.deploy.files"]}/com.mysample.mondrian.dsp-1.0.0.jar lib/com.mysample.mondrian.dsp-1.0.0.jar
 
 }
@@ -112,10 +114,10 @@ function publish_pentahoBA(){
 
 function deploy_metadataEtl(){
 	echo "Deploying Metadata ETL into Pentaho BA infrastructure"
-	rm -rf ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/metadataEtl
-	unzip -oq ${arr["ba.deploy.files"]}/metadataEtl.zip -d ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/
+	rm -rf ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/metadataEtl
+	unzip -oq ${arr["ba.deploy.files"]}/metadataEtl.zip -d ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/
 	
-	cd ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/metadataEtl/WEB-INF/
+	cd ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/metadataEtl/WEB-INF/
 	
 	sed -i "s/HOSTNAME/${arr["postgre.prj.ip"]}/g" portofino-model.xml
 	sed -i "s/PORT/${arr["postgre.prj.port"]}/g" portofino-model.xml
@@ -128,7 +130,7 @@ function deploy_metadataEtl(){
 	find WEB-INF/ -type f -exec sed -i "s/DATABASE/${arr["postgre.prj.database"]}/g" {} +
 	mv WEB-INF/portofino-model/est_dwh WEB-INF/portofino-model/${arr["postgre.prj.database"]}
 	
-	cd ${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/tomcat/webapps/metadataEtl/WEB-INF/groovy
+	cd ${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/tomcat/webapps/metadataEtl/WEB-INF/groovy
 	sed -i "s/ADMINPASSWORD/${arr["ba.pentahoba.password"]}/g" Security.groovy
 }
 

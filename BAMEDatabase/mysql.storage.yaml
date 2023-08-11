@@ -13,7 +13,7 @@ spec:
   accessModes:
     - ReadWriteMany
   local:
-    path: "/run/desktop/mnt/host/c/k8s.storage/mysql"
+    path: "/run/desktop/mnt/host/d/k8s.storage/mysql"
   nodeAffinity:
     required:
       nodeSelectorTerms:

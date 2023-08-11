@@ -68,7 +68,7 @@ function publish_pentahoBA(){
 	# Will get all prpt, cda, cdfde, wcdf, xwarq, saiku, xjpivot files
 	for j in `find ${arr["ba.deploy.files"]}/100.Publications -type f -name "*.zip"`
 	do
-		${arr["ba.pentahoba.deploy.dir"]}/biserver-ce/import-export.sh --import --url=http://${arr["ba.pentahoba.server"]}:${arr["ba.pentahoba.port"]}/pentaho --username=${arr["ba.pentahoba.admin"]} --password=${arr["ba.pentahoba.password"]} --charset=UTF-8 --path=/public --file-path=$j --overwrite=true --permission=true --retainOwnership=true
+		${arr["ba.pentahoba.deploy.dir"]}/pentaho-server/import-export.sh --import --url=http://${arr["ba.pentahoba.server"]}:${arr["ba.pentahoba.port"]}/pentaho --username=${arr["ba.pentahoba.admin"]} --password=${arr["ba.pentahoba.password"]} --charset=UTF-8 --path=/public --file-path=$j --overwrite=true --permission=true --retainOwnership=true
 	done
 	# XMI datasources registration
 	# Domain_id is indicated by upper(postgre.prj.database)

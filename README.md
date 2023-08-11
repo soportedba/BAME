@@ -69,8 +69,8 @@ kubectl exec -it pod/mysql-0 -- /bin/bash
 Deploy PentahoBA as Business Analytics solution
 ```
 cd BAMEBa
-docker build --no-cache -t bame/pentaho_base:6.1 -f Dockerfile .
-docker build --no-cache -t bame/pentaho:6.1 -f Dockerfile.bameba .
+docker build --no-cache -t bame/pentaho_base:9.3 -f Dockerfile .
+docker build --no-cache -t bame/pentaho:9.3 -f Dockerfile.bameba .
 cd ..
 kubectl apply -f BAMEBa/pentahoba.configmap.yaml
 kubectl apply -f BAMEBa/pentahoba.yaml
@@ -81,8 +81,8 @@ kubectl apply -f BAMEBa/pentahoba.yaml
 ETLS should include their default scheduler policy, inbuilt, so each container will run only for that related scheduler
 ```
 cd BAMEEtl
-docker build --no-cache -t bame/pentaho_base_etl:8.3 -f Dockerfile .
-docker build --no-cache -t bame/pentahopdi:8.3 -f Dockerfile.bameetl .
+docker build --no-cache -t bame/pentaho_base_etl:9.3 -f Dockerfile .
+docker build --no-cache -t bame/pentahopdi:9.3 -f Dockerfile.bameetl .
 cd ..
 kubectl apply -f BAMEEtl/pentahopdi.configmap.yaml
 kubectl apply -f BAMEEtl/pentahopdi.DWH.yaml 
@@ -118,24 +118,24 @@ Currently, access to resources is defined by NodePort, so to access to internal 
 ```
 kubectl get service
 NAME                     TYPE        CLUSTER-IP      EXTERNAL-IP    PORT(S)          AGE
-service/facturascripts   NodePort    10.108.122.89   192.168.0.34   80:32749/TCP     2m33s
+service/facturascripts   NodePort    10.108.122.89   192.168.0.10   80:32749/TCP     2m33s
 service/kubernetes       ClusterIP   10.96.0.1       <none>         443/TCP          4h42m
-service/mysql            NodePort    10.106.250.4    192.168.0.34   3306:32762/TCP   4h34m
-service/postgres         NodePort    10.104.56.37    192.168.0.34   5432:30636/TCP   4h40m
-service/utilities        NodePort    10.106.128.12   192.168.0.34   8080:31255/TCP   4h38m
+service/mysql            NodePort    10.106.250.4    192.168.0.10   3306:32762/TCP   4h34m
+service/postgres         NodePort    10.104.56.37    192.168.0.10   5432:30636/TCP   4h40m
+service/utilities        NodePort    10.106.128.12   192.168.0.10   8080:31255/TCP   4h38m
 ...
 ```
 
 * To access postgresql database:
-	* You can use: 192.168.0.34:30636 externally from k8s, or name "postgres" with default port: 5432 if accessing internally from k8s.
+	* You can use: 192.168.0.10:30636 externally from k8s, or name "postgres" with default port: 5432 if accessing internally from k8s.
 * To access mysql database:
-	* You can use: 192.168.0.34:32762 externally from k8s, or name "mysql" with default port: 3306 if accessing internally from k8s.
+	* You can use: 192.168.0.10:32762 externally from k8s, or name "mysql" with default port: 3306 if accessing internally from k8s.
 * To access Facturascripts:
-	* From a web browser: 192.168.0.34:32749 externally from k8s.
+	* From a web browser: 192.168.0.10:32749 externally from k8s.
 * To access MetadataETL
-	* From a web browser: http://192.168.0.34:30477/metadataEtl
+	* From a web browser: http://192.168.0.10:30477/metadataEtl
 * To access PentahoBA
-	* From a web browser: http://192.168.0.34:30477/pentaho/Home
+	* From a web browser: http://192.168.0.10:30477/pentaho/Home
 
 
 test

@@ -13,7 +13,7 @@ spec:
   accessModes:
     - ReadWriteMany
   local:
-    path: "/run/desktop/mnt/host/c/k8s.storage/facturascripts"
+    path: "/run/desktop/mnt/host/d/k8s.storage/facturascripts"
   nodeAffinity:
     required:
       nodeSelectorTerms:

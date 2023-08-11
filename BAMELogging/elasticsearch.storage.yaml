@@ -13,7 +13,7 @@ spec:
     storage: 5Gi
   accessModes: [ "ReadWriteOnce" ]
   local:
-    path: "/run/desktop/mnt/host/c/k8s.storage/elasticsearch"
+    path: "/run/desktop/mnt/host/d/k8s.storage/elasticsearch"
   nodeAffinity:
     required:
       nodeSelectorTerms:
